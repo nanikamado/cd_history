@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
-use std::fs::{remove_file, rename, File, OpenOptions};
+use std::fs::{create_dir_all, remove_file, rename, File, OpenOptions};
 use std::io::{stdout, BufRead, BufReader, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -26,6 +26,7 @@ enum Commands {
 
 fn main() {
     let config = dirs::config_dir().unwrap();
+    create_dir_all(config.join("cd_history")).unwrap();
     let db_rev = config.join("cd_history/log_rev");
     let c = Cli::parse();
     let mut s = env::current_dir().unwrap().into_os_string().into_vec();
@@ -72,23 +73,25 @@ fn main() {
                 }
                 remove_file(db_rev).unwrap();
             }
-            let mut f = BufReader::new(File::open(&db).unwrap());
-            loop {
-                let mut l = Vec::with_capacity(80);
-                let n = f.read_until(b'\n', &mut l).unwrap();
-                if n == 0 {
-                    break;
-                }
-                l.pop();
-                let l_s = OsString::from_vec(l);
-                let exists = Path::new(&l_s).is_dir();
-                l = l_s.into_vec();
-                l.push(b'\n');
-                if exists {
-                    if let Entry::Vacant(e) = paths.entry(l) {
-                        f_next.write_all(e.key()).unwrap();
-                        out.write_all(e.key()).unwrap();
-                        e.insert(());
+            if let Ok(f) = File::open(&db) {
+                let mut f = BufReader::new(f);
+                loop {
+                    let mut l = Vec::with_capacity(80);
+                    let n = f.read_until(b'\n', &mut l).unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    l.pop();
+                    let l_s = OsString::from_vec(l);
+                    let exists = Path::new(&l_s).is_dir();
+                    l = l_s.into_vec();
+                    l.push(b'\n');
+                    if exists {
+                        if let Entry::Vacant(e) = paths.entry(l) {
+                            f_next.write_all(e.key()).unwrap();
+                            out.write_all(e.key()).unwrap();
+                            e.insert(());
+                        }
                     }
                 }
             }
